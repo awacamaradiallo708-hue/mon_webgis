@@ -1,8 +1,6 @@
 streamlit
-leafmap
-localtileserver>=0.10.0
-xarray
-rioxarray
+folium
+streamlit-folium
 geopandas
 rasterio
 pandas
@@ -11,3 +9,4 @@ plotly
 matplotlib
 shapely
 pyproj
+pillow
