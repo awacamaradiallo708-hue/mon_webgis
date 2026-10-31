@@ -1,0 +1,10 @@
+streamlit>=1.28
+leafmap>=0.35
+geopandas>=0.14
+rasterio>=1.3
+pandas>=2.0
+numpy>=1.24
+plotly>=5.18
+matplotlib>=3.8
+shapely>=2.0
+pyproj>=3.6

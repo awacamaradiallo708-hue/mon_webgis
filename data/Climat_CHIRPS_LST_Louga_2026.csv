@@ -1,0 +1,8 @@
+system:index,Mois,MoisNum,Pluie_mm,Temp_Surface_C,.geo
+0,Mars,3,0.043096813986577644,41.191824937835385,"{""type"":""MultiPoint"",""coordinates"":[]}"
+1,Avril,4,0.03372485313291957,49.177585784146345,"{""type"":""MultiPoint"",""coordinates"":[]}"
+2,Mai,5,1.8177388918576491,44.834868061432935,"{""type"":""MultiPoint"",""coordinates"":[]}"
+3,Juin,6,6.973736751552034,45.713617035609765,"{""type"":""MultiPoint"",""coordinates"":[]}"
+4,Juillet,7,61.71210163104825,41.96076307231709,"{""type"":""MultiPoint"",""coordinates"":[]}"
+5,Aout,8,144.51328087889974,39.023565393902466,"{""type"":""MultiPoint"",""coordinates"":[]}"
+6,Septembre,9,117.46758685170151,37.24169321146343,"{""type"":""MultiPoint"",""coordinates"":[]}"

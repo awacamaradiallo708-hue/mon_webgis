@@ -1,0 +1,29 @@
+{
+  "titre": "Suivi des plantations et aménagements — Autoroute Dakar–Saint-Louis (Louga–Bandegne)",
+  "auteur": "Awa Camara Diallo",
+  "universite": "Université Amadou Mahtar Mbow",
+  "date_creation": "2026-10",
+  "crs": {
+    "affichage": "EPSG:4326 (WGS84)",
+    "source": "EPSG:32628 (UTM 28N)"
+  },
+  "sources": {
+    "sentinel2": "Copernicus Sentinel-2 L2A via Google Earth Engine",
+    "chirps": "CHIRPS Daily (UCSB-CHG) via GEE",
+    "landsat_lst": "Landsat 8/9 via GEE",
+    "pedologie": "BD PNADT — Morphopédologie du Sénégal",
+    "terrain": "Relevés de terrain (mai 2026)"
+  },
+  "indices": ["NDVI", "SAVI", "EVI", "NDMI"],
+  "periode": "Mars à septembre 2026",
+  "couches": [
+    {"nom": "Buffer 500 m", "type": "vecteur", "format": "Shapefile"},
+    {"nom": "Plantations d'alignement", "type": "vecteur", "format": "Shapefile (points)"},
+    {"nom": "Reboisement compensatoire", "type": "vecteur", "format": "Shapefile (polygone)"},
+    {"nom": "Talus", "type": "vecteur", "format": "Shapefile (18 polygones)"},
+    {"nom": "Classification mars/septembre", "type": "raster", "format": "GeoTIFF (3 classes)"},
+    {"nom": "Indices spectraux", "type": "raster", "format": "GeoTIFF (NDVI, SAVI, EVI, NDMI)"}
+  ],
+  "licence": "Usage académique — Master 2, Université Amadou Mahtar Mbow",
+  "contact": "awa.camara@etudiant.uam.edu.sn"
+}
