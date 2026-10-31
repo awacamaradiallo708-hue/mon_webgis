@@ -7,6 +7,8 @@
 #   pip install streamlit leafmap geopandas plotly xarray rioxarray localtileserver
 # ============================================================
 
+import os
+os.environ['LOCALTILESERVER_CLIENT_PREFIX'] = 'proxy/{port}'
 import streamlit as st
 import pandas as pd
 import geopandas as gpd
