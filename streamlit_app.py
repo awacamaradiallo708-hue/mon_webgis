@@ -1,6 +1,6 @@
 # ============================================================
 # DASHBOARD WEBGIS — SUIVI DES PLANTATIONS LOUGA–BANDEGNE
-# Version finale : 4 indices (NDVI, SAVI, EVI, NDMI), carte stable
+# Version finale : 4 indices avec palettes distinctes + légendes
 # Auteur : Awa Camara Diallo — Université Amadou Mahtar Mbow
 # ============================================================
 
@@ -19,6 +19,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from PIL import Image
+import base64
+import io
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -28,6 +30,16 @@ warnings.filterwarnings('ignore')
 st.set_page_config(page_title="WebGIS — Louga–Bandegne", page_icon="🌿", layout="wide")
 DATA_DIR = Path("data")
 RESULTATS_DIR = Path("resultats")
+
+# ============================================================
+# PALETTES DE COULEURS PAR INDICE
+# ============================================================
+PALETTES = {
+    "NDVI": "RdYlGn",   # Rouge → Jaune → Vert (vigueur)
+    "SAVI": "YlGn",     # Jaune → Vert (ajusté au sol)
+    "EVI":  "plasma",   # Violet → Orange (amélioré)
+    "NDMI": "BrBG",     # Marron → Bleu (humidité)
+}
 
 # ============================================================
 # FONCTIONS DE CHARGEMENT
@@ -55,16 +67,16 @@ def convertir_points(df, col_x="X", col_y="Y"):
     return gpd.GeoDataFrame(df_clean, geometry="geometry", crs="EPSG:4326")
 
 # ============================================================
-# FONCTION : Conversion GeoTIFF → tableau numpy pour Folium
+# FONCTION : Conversion GeoTIFF → tableau numpy + LEGENDE
 # ============================================================
 @st.cache_data
-def raster_to_array(tif_path, band=1, cmap_name="RdYlGn", vmin=None, vmax=None, alpha=0.7):
+def raster_to_array_with_legend(tif_path, band=1, cmap_name="RdYlGn", alpha=0.7):
     """
-    Convertit une bande d'un GeoTIFF en tableau numpy (RGBA) + extent WGS84.
-    Retourne un tableau numpy que Folium peut sérialiser.
+    Convertit une bande d'un GeoTIFF en tableau numpy RGBA.
+    Retourne aussi l'extent WGS84, les valeurs min/max, et une légende PNG (base64).
     """
     if not tif_path.exists():
-        return None, None
+        return None, None, None, None, None
     
     with rasterio.open(tif_path) as src:
         data = src.read(band).astype(float)
@@ -75,10 +87,10 @@ def raster_to_array(tif_path, band=1, cmap_name="RdYlGn", vmin=None, vmax=None, 
         crs = src.crs
     
     vals = data[~np.isnan(data)]
-    if len(vals) == 0: return None, None
+    if len(vals) == 0: return None, None, None, None, None
     
-    if vmin is None: vmin = float(np.nanpercentile(vals, 2))
-    if vmax is None: vmax = float(np.nanpercentile(vals, 98))
+    vmin = float(np.nanpercentile(vals, 2))
+    vmax = float(np.nanpercentile(vals, 98))
     
     cmap = plt.get_cmap(cmap_name)
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
@@ -94,7 +106,25 @@ def raster_to_array(tif_path, band=1, cmap_name="RdYlGn", vmin=None, vmax=None, 
                                    bounds.right, bounds.top)
     extent = [[bounds_wgs[1], bounds_wgs[0]], [bounds_wgs[3], bounds_wgs[2]]]
     
-    return np.array(img), extent
+    # --- Création de la légende (barre horizontale) ---
+    fig, ax = plt.subplots(figsize=(4, 0.6))
+    gradient = np.linspace(vmin, vmax, 256).reshape(1, -1)
+    ax.imshow(gradient, aspect='auto', cmap=cmap_name, extent=[vmin, vmax, 0, 1])
+    ax.set_yticks([])
+    ax.set_xticks([vmin, (vmin + vmax) / 2, vmax])
+    ax.set_xticklabels([f'{vmin:.2f}', f'{(vmin + vmax) / 2:.2f}', f'{vmax:.2f}'],
+                       fontsize=8)
+    ax.set_xlabel(f'{indice_legend}', fontsize=9, fontweight='bold')
+    plt.tight_layout()
+    
+    # Conversion de la légende en base64
+    buf_leg = io.BytesIO()
+    fig.savefig(buf_leg, format='png', dpi=100, bbox_inches='tight')
+    plt.close(fig)
+    buf_leg.seek(0)
+    legend_b64 = base64.b64encode(buf_leg.getvalue()).decode()
+    
+    return np.array(img), extent, vmin, vmax, legend_b64
 
 # ============================================================
 # CHARGEMENT DES DONNÉES
@@ -129,7 +159,7 @@ c4.metric("Alertes (NDVI < 0.2)", f"{nb_alertes}", "Septembre 2026", delta_color
 st.divider()
 
 # ============================================================
-# 2. CARTE INTERACTIVE (STABLE AVEC STREAMLIT-FOLIUM)
+# 2. CARTE INTERACTIVE AVEC 4 INDICES ET LÉGENDES
 # ============================================================
 st.header("🗺️ Carte interactive avec requêtes et 4 indices")
 
@@ -149,9 +179,11 @@ with col_map1:
     st.markdown("**3. Afficher un indice (Raster)**")
     mois_raster = st.selectbox("Mois", ["Aucun", "Septembre", "Mars", "Variation"])
     if mois_raster in ["Septembre", "Mars", "Variation"]:
-        indice_raster = st.selectbox("Indice", ["NDVI", "SAVI", "EVI", "NDMI"])
+        indice_raster = st.selectbox("Indice", list(PALETTES.keys()))
+        palette_choisie = PALETTES[indice_raster]
     else:
         indice_raster = None
+        palette_choisie = None
 
     st.markdown("**4. Filtre attributaire (état sanitaire)**")
     if not df_points.empty and "Etat_arbre" in df_points.columns:
@@ -219,7 +251,8 @@ with col_map2:
                                 fillOpacity=0.8, popup=f"État : {etat}").add_to(fg_points)
         fg_points.add_to(m)
 
-    # --- Raster (conversion en tableau numpy) ---
+    # --- Raster (conversion en tableau numpy + légende) ---
+    legend_html = None
     if mois_raster != "Aucun" and indice_raster:
         if mois_raster == "Variation":
             tif_path = DATA_DIR / f"Variation_{indice_raster}_Mars_Septembre_2026.tif"
@@ -229,21 +262,40 @@ with col_map2:
             band = {"NDVI": 1, "SAVI": 2, "EVI": 3, "NDMI": 4}[indice_raster]
 
         if tif_path.exists():
-            png_array, extent = raster_to_array(tif_path, band=band, cmap_name="RdYlGn", alpha=0.7)
+            # On passe indice_legend pour la légende
+            png_array, extent, vmin, vmax, legend_b64 = raster_to_array_with_legend(
+                tif_path, band=band, cmap_name=palette_choisie, alpha=0.7
+            )
             if png_array is not None:
                 folium.raster_layers.ImageOverlay(
-                    image=png_array,   # ← tableau numpy (accepté par Folium)
+                    image=png_array,
                     bounds=extent,
                     opacity=0.7,
                     name=f"{indice_raster} — {mois_raster}"
                 ).add_to(m)
-                st.success(f"✅ {indice_raster} de {mois_raster} affiché")
+                st.success(f"✅ {indice_raster} de {mois_raster} affiché (palette : {palette_choisie})")
+                
+                # --- Ajout de la légende dans un coin de la carte ---
+                legend_html = f"""
+                <div style="position: fixed; 
+                            bottom: 50px; right: 50px; width: 250px; height: auto; 
+                            background-color: white; border:2px solid grey; z-index:9999; 
+                            font-size:12px; padding: 8px; border-radius: 5px;">
+                    <b>{indice_raster} — {mois_raster}</b><br>
+                    <img src="data:image/png;base64,{legend_b64}" style="width: 100%;"><br>
+                    <small>Valeurs : {vmin:.2f} → {vmax:.2f}</small>
+                </div>
+                """
             else:
                 st.error("Impossible de lire le raster")
         else:
             st.error(f"Fichier introuvable : {tif_path.name}")
 
     folium.LayerControl().add_to(m)
+    
+    # --- Ajout de la légende dans la carte ---
+    if legend_html:
+        m.get_root().html.add_child(folium.Element(legend_html))
     
     # --- Affichage de la carte dans Streamlit ---
     st_folium(m, width=1200, height=600, returned_objects=[])
