@@ -1,6 +1,6 @@
 # ============================================================
 # DASHBOARD WEBGIS — SUIVI DES PLANTATIONS LOUGA–BANDEGNE
-# Version finale : 4 indices avec palettes distinctes + légendes
+# Version finale corrigée : 4 indices avec palettes distinctes
 # Auteur : Awa Camara Diallo — Université Amadou Mahtar Mbow
 # ============================================================
 
@@ -67,10 +67,10 @@ def convertir_points(df, col_x="X", col_y="Y"):
     return gpd.GeoDataFrame(df_clean, geometry="geometry", crs="EPSG:4326")
 
 # ============================================================
-# FONCTION : Conversion GeoTIFF → tableau numpy + LEGENDE
+# FONCTION : Conversion GeoTIFF → tableau numpy + légende PNG
 # ============================================================
 @st.cache_data
-def raster_to_array_with_legend(tif_path, band=1, cmap_name="RdYlGn", alpha=0.7):
+def raster_to_array_with_legend(tif_path, band=1, cmap_name="RdYlGn", indice_name="NDVI", alpha=0.7):
     """
     Convertit une bande d'un GeoTIFF en tableau numpy RGBA.
     Retourne aussi l'extent WGS84, les valeurs min/max, et une légende PNG (base64).
@@ -114,7 +114,7 @@ def raster_to_array_with_legend(tif_path, band=1, cmap_name="RdYlGn", alpha=0.7)
     ax.set_xticks([vmin, (vmin + vmax) / 2, vmax])
     ax.set_xticklabels([f'{vmin:.2f}', f'{(vmin + vmax) / 2:.2f}', f'{vmax:.2f}'],
                        fontsize=8)
-    ax.set_xlabel(f'{indice_legend}', fontsize=9, fontweight='bold')
+    ax.set_xlabel(f'{indice_name}', fontsize=9, fontweight='bold')
     plt.tight_layout()
     
     # Conversion de la légende en base64
@@ -262,9 +262,9 @@ with col_map2:
             band = {"NDVI": 1, "SAVI": 2, "EVI": 3, "NDMI": 4}[indice_raster]
 
         if tif_path.exists():
-            # On passe indice_legend pour la légende
+            # Appel corrigé : on passe indice_name
             png_array, extent, vmin, vmax, legend_b64 = raster_to_array_with_legend(
-                tif_path, band=band, cmap_name=palette_choisie, alpha=0.7
+                tif_path, band=band, cmap_name=palette_choisie, indice_name=indice_raster, alpha=0.7
             )
             if png_array is not None:
                 folium.raster_layers.ImageOverlay(
