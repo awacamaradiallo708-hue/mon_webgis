@@ -1,6 +1,6 @@
 streamlit
 leafmap
-localtileserver
+localtileserver>=0.10.0
 xarray
 rioxarray
 geopandas
