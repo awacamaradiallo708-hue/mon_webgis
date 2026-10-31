@@ -1,6 +1,6 @@
 # ============================================================
 # DASHBOARD WEBGIS — SUIVI DES PLANTATIONS LOUGA–BANDEGNE
-# Version finale corrigée : 4 indices avec palettes distinctes
+# Version finale : 4 indices, filtres actifs, légendes dynamiques
 # Auteur : Awa Camara Diallo — Université Amadou Mahtar Mbow
 # ============================================================
 
@@ -42,6 +42,17 @@ PALETTES = {
 }
 
 # ============================================================
+# COULEURS PAR ÉTAT SANITAIRE
+# ============================================================
+COULEURS_ETAT = {
+    "arbre en bonne sante": "green",
+    "arbre peu stresse": "yellow",
+    "arbre stresse": "orange",
+    "arbre tres stresse": "darkred",
+    "arbre mort": "red"
+}
+
+# ============================================================
 # FONCTIONS DE CHARGEMENT
 # ============================================================
 @st.cache_data
@@ -71,10 +82,6 @@ def convertir_points(df, col_x="X", col_y="Y"):
 # ============================================================
 @st.cache_data
 def raster_to_array_with_legend(tif_path, band=1, cmap_name="RdYlGn", indice_name="NDVI", alpha=0.7):
-    """
-    Convertit une bande d'un GeoTIFF en tableau numpy RGBA.
-    Retourne aussi l'extent WGS84, les valeurs min/max, et une légende PNG (base64).
-    """
     if not tif_path.exists():
         return None, None, None, None, None
     
@@ -100,24 +107,21 @@ def raster_to_array_with_legend(tif_path, band=1, cmap_name="RdYlGn", indice_nam
     
     img = Image.fromarray(rgba)
     
-    # Conversion de l'extent en WGS84
     bounds_wgs = transform_bounds(crs, 'EPSG:4326',
                                    bounds.left, bounds.bottom,
                                    bounds.right, bounds.top)
     extent = [[bounds_wgs[1], bounds_wgs[0]], [bounds_wgs[3], bounds_wgs[2]]]
     
-    # --- Création de la légende (barre horizontale) ---
+    # Création de la légende
     fig, ax = plt.subplots(figsize=(4, 0.6))
     gradient = np.linspace(vmin, vmax, 256).reshape(1, -1)
     ax.imshow(gradient, aspect='auto', cmap=cmap_name, extent=[vmin, vmax, 0, 1])
     ax.set_yticks([])
     ax.set_xticks([vmin, (vmin + vmax) / 2, vmax])
-    ax.set_xticklabels([f'{vmin:.2f}', f'{(vmin + vmax) / 2:.2f}', f'{vmax:.2f}'],
-                       fontsize=8)
+    ax.set_xticklabels([f'{vmin:.2f}', f'{(vmin + vmax) / 2:.2f}', f'{vmax:.2f}'], fontsize=8)
     ax.set_xlabel(f'{indice_name}', fontsize=9, fontweight='bold')
     plt.tight_layout()
     
-    # Conversion de la légende en base64
     buf_leg = io.BytesIO()
     fig.savefig(buf_leg, format='png', dpi=100, bbox_inches='tight')
     plt.close(fig)
@@ -159,7 +163,7 @@ c4.metric("Alertes (NDVI < 0.2)", f"{nb_alertes}", "Septembre 2026", delta_color
 st.divider()
 
 # ============================================================
-# 2. CARTE INTERACTIVE AVEC 4 INDICES ET LÉGENDES
+# 2. CARTE INTERACTIVE AVEC 4 INDICES ET FILTRES
 # ============================================================
 st.header("🗺️ Carte interactive avec requêtes et 4 indices")
 
@@ -173,7 +177,7 @@ with col_map1:
     couches_choisies = st.multiselect(
         "Couches",
         ["Buffer 500m", "Reboisement", "Talus", "Points de plantation"],
-        default=["Buffer 500m", "Reboisement", "Talus"]
+        default=["Buffer 500m", "Reboisement", "Talus", "Points de plantation"]
     )
 
     st.markdown("**3. Afficher un indice (Raster)**")
@@ -205,11 +209,17 @@ with col_map1:
 with col_map2:
     # --- Filtres sur les points ---
     df_points_filtres = gdf_points.copy()
+    
+    # Filtre 1 : état sanitaire
     if etats_choisis and "Etat_arbre" in df_points_filtres.columns:
         df_points_filtres = df_points_filtres[df_points_filtres["Etat_arbre"].isin(etats_choisis)]
+    
+    # Filtre 2 : NDVI minimum
     if not df_points_filtres.empty and "NDVI" in df_points_filtres.columns:
         df_sept_filtres = df_points_filtres[df_points_filtres["Mois"] == "Septembre"] if "Mois" in df_points_filtres.columns else df_points_filtres
         df_points_filtres = df_sept_filtres[df_sept_filtres["NDVI"] >= seuil_ndvi]
+    
+    # Filtre 3 : requête spatiale (buffer)
     if utiliser_buffer and not df_points_filtres.empty:
         rayon_deg = rayon_m / 111000
         point_central = shapely.geometry.Point(point_x, point_y)
@@ -239,16 +249,24 @@ with col_map2:
     if "Talus" in couches_choisies and not shp_talus.empty:
         folium.GeoJson(shp_talus, name="Talus",
                        style_function=lambda x: {"color": "#9467bd", "weight": 2, "fillOpacity": 0.6}).add_to(m)
+    
+    # --- Points de plantation filtrés (AVEC couleurs selon état) ---
     if "Points de plantation" in couches_choisies and not df_points_filtres.empty:
         fg_points = folium.FeatureGroup(name="Plantations")
         for _, row in df_points_filtres.iterrows():
             etat = row.get("Etat_arbre", "")
-            couleur = {"arbre en bonne sante": "green", "arbre mort": "red",
-                       "arbre stresse": "orange", "arbre tres stresse": "darkred",
-                       "arbre peu stresse": "yellow"}.get(etat, "gray")
-            folium.CircleMarker(location=[row.geometry.y, row.geometry.x],
-                                radius=3, color=couleur, fill=True, fillColor=couleur,
-                                fillOpacity=0.8, popup=f"État : {etat}").add_to(fg_points)
+            # Couleur selon l'état sanitaire
+            couleur = COULEURS_ETAT.get(etat, "gray")
+            
+            folium.CircleMarker(
+                location=[row.geometry.y, row.geometry.x],
+                radius=3,
+                color=couleur,
+                fill=True,
+                fillColor=couleur,
+                fillOpacity=0.8,
+                popup=f"État (mai 2026) : {etat}"
+            ).add_to(fg_points)
         fg_points.add_to(m)
 
     # --- Raster (conversion en tableau numpy + légende) ---
@@ -262,7 +280,6 @@ with col_map2:
             band = {"NDVI": 1, "SAVI": 2, "EVI": 3, "NDMI": 4}[indice_raster]
 
         if tif_path.exists():
-            # Appel corrigé : on passe indice_name
             png_array, extent, vmin, vmax, legend_b64 = raster_to_array_with_legend(
                 tif_path, band=band, cmap_name=palette_choisie, indice_name=indice_raster, alpha=0.7
             )
@@ -275,7 +292,7 @@ with col_map2:
                 ).add_to(m)
                 st.success(f"✅ {indice_raster} de {mois_raster} affiché (palette : {palette_choisie})")
                 
-                # --- Ajout de la légende dans un coin de la carte ---
+                # Légende dans la carte
                 legend_html = f"""
                 <div style="position: fixed; 
                             bottom: 50px; right: 50px; width: 250px; height: auto; 
@@ -293,14 +310,21 @@ with col_map2:
 
     folium.LayerControl().add_to(m)
     
-    # --- Ajout de la légende dans la carte ---
     if legend_html:
         m.get_root().html.add_child(folium.Element(legend_html))
     
-    # --- Affichage de la carte dans Streamlit ---
     st_folium(m, width=1200, height=600, returned_objects=[])
     
-    st.caption(f"**{len(df_points_filtres)} points** correspondent aux filtres.")
+    # --- Résumé des filtres appliqués ---
+    st.caption(f"**{len(df_points_filtres)} points** affichés après application des filtres.")
+    
+    # --- Légende des états sanitaires (sous la carte) ---
+    st.markdown("**Légende des états sanitaires (mai 2026) :**")
+    cols_legende = st.columns(len(COULEURS_ETAT))
+    for i, (etat, couleur) in enumerate(COULEURS_ETAT.items()):
+        with cols_legende[i]:
+            st.markdown(f"<span style='color:{couleur}; font-size:20px;'>●</span> {etat}", 
+                        unsafe_allow_html=True)
 
 st.divider()
 
